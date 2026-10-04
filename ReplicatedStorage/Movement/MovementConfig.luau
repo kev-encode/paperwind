@@ -11,8 +11,8 @@
 local MovementConfig = {}
 
 MovementConfig.Speed = {
-	Walk = 18,
-	Sprint = 30,
+	Walk = 20,
+	Sprint = 40,
 	-- Seconds for the top speed to ramp between walk and sprint.
 	SprintRampTime = 0.25,
 }
@@ -47,7 +47,7 @@ MovementConfig.Jump = {
 MovementConfig.Camera = {
 	BaseFOV = 70,
 	-- Reached at full sprint speed.
-	SprintFOV = 80,
+	SprintFOV = 90,
 	-- FOV smoothing; higher reacts faster.
 	FOVResponse = 7,
 	-- Max camera dip (studs) on a hard landing.
