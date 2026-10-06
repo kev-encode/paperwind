@@ -38,6 +38,9 @@ config.camera = {
 	sprint_fov = 90, -- note: reached at full sprint
 	fov_response = 7, -- note: higher reacts faster
 	landing_dip = 0.45, -- note: max dip in studs on hard landings
+	tilt = 5, -- note: max roll in degrees, the view leans into sideways movement
+	tilt_speed = config.speed.sprint, -- note: sideways speed that reaches the full tilt
+	tilt_response = 8, -- note: higher reacts faster
 }
 
 config.input = {
@@ -59,7 +62,7 @@ config.animations = {
 		{ id = "rbxassetid://18537376492", weight = 9 }, -- note: adidas sports idle
 		{ id = "rbxassetid://18537371272", weight = 1 }, -- note: adidas sports idle variation
 	},
-	
+
 	walk = { id = "rbxassetid://913402848", natural_speed = 5.6, strike_phase = 0.730 }, -- note: roblox r15 walk
 	run = { id = "rbxassetid://913376220", natural_speed = 12.8, strike_phase = 0.747 }, -- note: roblox r15 run
 	sprint = { id = "rbxassetid://18537384940", natural_speed = 27.6, strike_phase = 0.180 }, -- note: adidas sports run
