@@ -38,9 +38,10 @@ config.camera = {
 	sprint_fov = 90, -- note: reached at full sprint
 	fov_response = 7, -- note: higher reacts faster
 	landing_dip = 0.45, -- note: max dip in studs on hard landings
-	tilt = 5, -- note: max roll in degrees, the view leans into sideways movement
-	tilt_speed = config.speed.sprint, -- note: sideways speed that reaches the full tilt
-	tilt_response = 8, -- note: higher reacts faster
+	roll = 3, -- note: max roll in degrees, the view leans into sideways movement
+	pitch = 1.5, -- note: max pitch in degrees, the view leans into forward and back movement
+	tilt_speed = config.speed.sprint, -- note: speed that reaches the full roll or pitch
+	tilt_response = 6, -- note: higher reacts faster
 }
 
 config.input = {

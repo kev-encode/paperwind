@@ -2,9 +2,9 @@
 --[[
 	MovementController
 	What: momentum-based walk, sprint, and jump for the local character
-	How: runs right after the PlayerModule each frame, smooths velocity, then re-issues Humanoid:Move() and WalkSpeed; the camera tilt runs after the camera updates
+	How: runs right after the PlayerModule each frame, smooths velocity, then re-issues Humanoid:Move() and WalkSpeed; the camera tilt goes on after the camera updates and comes off before the next update
 	Rules: air control never adds speed and landings shed speed, so b-hopping is never faster than running
-	Extras: sprint FOV, strafe camera tilt, coyote time, jump buffer, faster falls, landing camera dip, touch sprint button
+	Extras: sprint FOV, camera tilt (strafe roll and forward/back pitch), coyote time, jump buffer, faster falls, landing camera dip, touch sprint button
 	Reads: SpeedMultiplier (number), MovementDisabled (boolean) character attributes
 	Writes: Sprinting (boolean) character attribute
 	Tuning: ReplicatedStorage.Movement.MovementConfig
@@ -51,7 +51,10 @@ local dip_position = 0
 local dip_velocity = 0
 local dip_active = false
 local fov = config.camera.fov
-local tilt = 0 -- note: current camera roll in degrees, positive leans right
+local roll = 0 -- note: current camera roll in degrees, positive leans right
+local pitch = 0 -- note: current camera pitch in degrees, positive leans forward
+local untilted_view: CFrame? = nil -- note: the camera's own view before the tilt went on
+local tilted_view: CFrame? = nil -- note: the view with the tilt, to spot changes made by other scripts
 local sprint_attribute = false
 
 --------------------------------------------------------------------
@@ -404,7 +407,20 @@ local function updateCamera(hum: Humanoid, root: BasePart, dt: number)
 	end
 end
 
--- note: strafe roll like quake and nico's nextbots, the view leans into sideways movement
+-- note: the camera builds each frame from its last view, so the pitch comes off first or it would keep adding up
+local function removeCameraTilt()
+	local camera = workspace.CurrentCamera
+	local untilted = untilted_view
+	local tilted = tilted_view
+	if camera and untilted and tilted and camera.CFrame:FuzzyEq(tilted, 1e-4) then
+		camera.CFrame = untilted
+	end
+
+	untilted_view = nil
+	tilted_view = nil
+end
+
+-- note: roll and pitch like nico's nextbots, the view leans into the direction of movement
 local function applyCameraTilt(dt: number)
 	local camera = workspace.CurrentCamera
 	if not camera then
@@ -413,7 +429,8 @@ local function applyCameraTilt(dt: number)
 
 	-- note: only the default camera rebuilds its view every frame, so scripted cameras are left alone
 	if camera.CameraType ~= Enum.CameraType.Custom then
-		tilt = 0
+		roll = 0
+		pitch = 0
 		return
 	end
 
@@ -422,7 +439,8 @@ local function applyCameraTilt(dt: number)
 	local view = camera.CFrame
 	local level_view = CFrame.lookAt(view.Position, view.Position + view.LookVector)
 
-	local target = 0
+	local target_roll = 0
+	local target_pitch = 0
 	local hum = humanoid
 	local root = root_part
 	local char = character
@@ -430,19 +448,33 @@ local function applyCameraTilt(dt: number)
 		-- note: walking, running and airborne only, climbing, swimming and seated settle back to level
 		local state = hum:GetState()
 		if GROUND_STATES[state] or AIR_STATES[state] then
-			local side_speed = flat(root.AssemblyLinearVelocity):Dot(level_view.RightVector)
-			local amount = math.clamp(side_speed / math.max(config.camera.tilt_speed, 1), -1, 1)
-			target = amount * config.camera.tilt
+			local flat_velocity = flat(root.AssemblyLinearVelocity)
+			local tilt_speed = math.max(config.camera.tilt_speed, 1)
+			local side_speed = flat_velocity:Dot(level_view.RightVector)
+
+			local forward = flat(level_view.LookVector)
+			local forward_speed = 0
+			if forward.Magnitude > 1e-3 then
+				forward_speed = flat_velocity:Dot(forward.Unit)
+			end
+
+			target_roll = math.clamp(side_speed / tilt_speed, -1, 1) * config.camera.roll
+			target_pitch = math.clamp(forward_speed / tilt_speed, -1, 1) * config.camera.pitch
 		end
 	end
 
-	tilt += (target - tilt) * (1 - math.exp(-config.camera.tilt_response * dt))
-	if math.abs(tilt) < 1e-3 then
+	local smoothing = 1 - math.exp(-config.camera.tilt_response * dt)
+	roll += (target_roll - roll) * smoothing
+	pitch += (target_pitch - pitch) * smoothing
+	if math.abs(roll) < 1e-3 and math.abs(pitch) < 1e-3 then
 		return
 	end
 
-	-- note: the roll goes on a level copy of the view, so a frame the camera skips can't stack it
-	camera.CFrame = level_view * CFrame.Angles(0, 0, math.rad(-tilt))
+	-- note: the tilt goes on a level copy of the view, so a frame the camera skips can't stack it
+	local tilted = level_view * CFrame.Angles(math.rad(-pitch), 0, math.rad(-roll))
+	untilted_view = view
+	tilted_view = tilted
+	camera.CFrame = tilted
 end
 
 --------------------------------------------------------------------
@@ -630,5 +662,6 @@ if player.Character then -- note: `player.Character` is marked as an error in ID
 end
 
 run_service:BindToRenderStep("PaperwindMovement", Enum.RenderPriority.Input.Value + 1, step)
+run_service:BindToRenderStep("PaperwindCameraUntilt", Enum.RenderPriority.Camera.Value - 1, removeCameraTilt)
 run_service:BindToRenderStep("PaperwindCameraTilt", Enum.RenderPriority.Camera.Value + 1, applyCameraTilt)
 run_service.PreSimulation:Connect(applyFallGravity)

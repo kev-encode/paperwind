@@ -9,6 +9,7 @@
 local lighting = game:GetService("Lighting")
 local workspace = game:GetService("Workspace")
 local config = require(script.Parent:WaitForChild("LightingConfig"))
+
 type Values = { [string]: any }
 type Keyframe = { time: number, name: string, [string]: any }
 local blender = {}
@@ -28,7 +29,8 @@ local GROUPS = {
 	"Lighting",
 	"Atmosphere",
 	"ColorCorrection",
-	"Bloom", "SunRays",
+	"Bloom",
+	"SunRays",
 	"DepthOfField",
 	"Clouds",
 }
@@ -42,8 +44,8 @@ end)
 do
 	local first = keyframes[1]
 	
-	for i, keyframe in keyframes do
-		for j, group in GROUPS do
+	for _, keyframe in keyframes do
+		for _, group in GROUPS do
 			for property in (first[group] or {}) :: Values do
 				if keyframe[group] == nil or keyframe[group][property] == nil then
 					warn(string.format("[Lighting] Keyframe '%s' is missing %s.%s", keyframe.name, group, property))
@@ -58,6 +60,10 @@ local targets: { [string]: Instance } = {}
 local function getTarget(group: string): Instance
 	if group == "Lighting" then
 		return lighting
+	end
+
+	if group == "Terrain" then
+		return workspace.Terrain
 	end
 	
 	local cached = targets[group]
@@ -119,7 +125,7 @@ function blender.evaluate(clock: number): { [string]: Values }
 	local alpha = smoothstep(math.clamp(((clock - before.time) % 24) / span, 0, 1))
 
 	local result: { [string]: Values } = {}
-	for i, group in GROUPS do
+	for _, group in GROUPS do
 		local from, to = before[group], after[group]
 		if from and to then
 			local values: Values = {}
@@ -199,6 +205,11 @@ function blender.applySetup()
 		for property, value in values do
 			setIfDifferent(instance, property, value)
 		end
+	end
+
+	local terrain = workspace.Terrain
+	for material_name, color in config.material_colors :: { [string]: Color3 } do
+		terrain:SetMaterialColor((Enum.Material :: any)[material_name], color)
 	end
 end
 
