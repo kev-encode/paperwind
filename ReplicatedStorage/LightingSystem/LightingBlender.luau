@@ -3,12 +3,14 @@
 	LightingBlender
 	What: blends config.keyframes for clock time and applies them to Lighting, its effects, and terrain clouds
 	Used by: LightingController, every frame
+	Zones: apply takes optional zone weights; LightingZones then adjusts the blend for the region the camera is in
 	Preview: require(game.ReplicatedStorage.LightingSystem.LightingBlender).preview(17.5)
 ]]
 
 local lighting = game:GetService("Lighting")
 local workspace = game:GetService("Workspace")
 local config = require(script.Parent:WaitForChild("LightingConfig"))
+local zones = require(script.Parent:WaitForChild("LightingZones"))
 
 type Values = { [string]: any }
 type Keyframe = { time: number, name: string, [string]: any }
@@ -213,11 +215,16 @@ function blender.applySetup()
 	end
 end
 
--- note: applies the lighting for a clock time, which also moves the sun and moon
-function blender.apply(clock: number)
+-- note: applies the lighting for a clock time, which also moves the sun and moon; zone weights add local changes
+function blender.apply(clock: number, zone_weights: { [string]: number }?)
 	lighting.ClockTime = clock % 24
-	
-	for group, values in blender.evaluate(clock) do
+
+	local blended = blender.evaluate(clock)
+	if zone_weights then
+		zones.adjust(blended, zone_weights)
+	end
+
+	for group, values in blended do
 		local instance = getTarget(group)
 		
 		for property, value in values do

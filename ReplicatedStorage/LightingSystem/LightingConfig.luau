@@ -65,6 +65,9 @@ config.material_colors = {
 	Ground = rgb(112, 100, 80),
 	Mud = rgb(90, 80, 68),
 	Limestone = rgb(104, 98, 88),
+	LeafyGrass = rgb(84, 98, 56),
+	-- note: salt is drawn as forest leaf litter (MaterialService override); a light tint takes the edge off its orange
+	Salt = rgb(200, 190, 170),
 }
 
 --------------------------------------------------------------------
@@ -73,7 +76,7 @@ config.material_colors = {
 
 config.cycle = {
 	day_length = 12, -- note: one full 24h day, in real minutes
-	start_time = 17.85, -- note: clock time when a server starts (sunset keyframe)
+	start_time = 17.00, -- note: clock time when a server starts (sunset keyframe)
 	-- note: daylight window in clock hours and its share of real time, nights pass faster
 	daytime_start = 5.5,
 	daytime_end = 19,
@@ -427,6 +430,28 @@ config.keyframes = {
 			Cover = 0.5,
 			Density = 0.55,
 			Color = rgb(60, 70, 92),
+		},
+	},
+}
+
+--------------------------------------------------------------------
+-- Zones (LightingZones)
+--------------------------------------------------------------------
+
+-- note: changes on top of the keyframes inside a region (ReplicatedStorage.World.Regions); fade is the signed distance
+-- from the outline, in studs, over which the zone eases in; add offsets numbers, tint multiplies colors
+config.zones = {
+	Glimmerwood = {
+		region = "Glimmerwood",
+		fade = { -10, 45 },
+		add = {
+			-- note: a thicker, softer haze under the canopy, and stronger shafts where the sun breaks through
+			Atmosphere = { Density = 0.1, Haze = 0.8 },
+			SunRays = { Intensity = 0.05 },
+			DepthOfField = { FarIntensity = 0.06 },
+		},
+		tint = {
+			Atmosphere = { Color = rgb(222, 236, 220) },
 		},
 	},
 }
