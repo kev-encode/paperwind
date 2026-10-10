@@ -10,6 +10,10 @@
 	Wind: the prevailing wind comes off the sea from the south-west, so coastal trees lean toward the north-east (+x, -z)
 	Cost: leaves, flowers and scrub skip collision and queries; an invisible box in each trunk and along each hedgerow keeps them solid;
 		rocks are plain blocks
+	Trees: each one is set down so its trunk meets the lowest ground under it; meshes with exposed roots (RootDepth attribute on
+		the Foliage model) are grown by that share and sunk until the roots are underground
+	Trunks: each tree's Foliage model holds its trunk line and width (TrunkBase, TrunkTop, TrunkWidth, model space, measured
+		from the mesh), so the collider follows the visible trunk even where it stands off the pivot
 ]]
 
 local server_storage = game:GetService("ServerStorage")
@@ -36,6 +40,8 @@ local SPIKES = {
 }
 local APPLES = { rgb(178, 52, 42), rgb(196, 146, 52), rgb(122, 150, 58) }
 local LICHEN = rgb(150, 152, 124)
+local TREE_SINK = 0.3 -- note: how far a trunk's foot goes below the lowest ground under it
+local COLLIDER_SINK = 3 -- note: how far a trunk collider reaches below the trunk's base, so it meets the ground on slopes
 
 -- note: SurfaceAppearance tints; a laurel tinted this way turns gorse-dark with yellow blossom, hawthorn leaves run darker,
 -- and the yellow-green leaf patch becomes ivy
@@ -111,9 +117,51 @@ local function crownOf(model: Model): BasePart?
 	return nil
 end
 
--- note: an invisible box up the trunk from its foot, so the meshes themselves skip physics
-local function trunkCollider(kit, model: Model, diameter: number, height: number)
-	kit.collider(model, Vector3.new(diameter, height, diameter), model:GetPivot() * CFrame.new(0, height / 2, 0))
+-- note: an invisible box along the visible trunk, from just under its base to reach studs up it, so the meshes skip physics
+local function trunkCollider(kit, model: Model, name: string, reach: number)
+	local source = foliageSource(name)
+	local scale = model:GetScale() / source:GetScale()
+	local pivot = model:GetPivot()
+	local base = pivot:PointToWorldSpace((source:GetAttribute("TrunkBase") :: Vector3) * scale)
+	local top = pivot:PointToWorldSpace((source:GetAttribute("TrunkTop") :: Vector3) * scale)
+	local width = (source:GetAttribute("TrunkWidth") :: number) * scale
+
+	local axis = (top - base).Unit
+	local from = base - axis * COLLIDER_SINK
+	local to = base + axis * reach
+	local right = axis:Cross(Vector3.zAxis).Unit
+	local frame = CFrame.fromMatrix((from + to) / 2, right, axis)
+	kit.collider(model, Vector3.new(width, (to - from).Magnitude, width), frame)
+end
+
+-- note: share of a Foliage tree's height that is exposed roots; 0 when its mesh has none
+local function rootShare(name: string): number
+	local share = foliageSource(name):GetAttribute("RootDepth")
+	if typeof(share) == "number" then
+		return share
+	end
+
+	return 0
+end
+
+-- note: a tree that meets the ground all round: grown by its root share so the part above ground keeps the height asked for,
+-- then lowered until its foot sits below the lowest ground under the trunk, which also buries any roots
+local function plantTree(kit, parent: Instance, name: string, frame: CFrame, height: number): Model
+	local share = rootShare(name)
+	local grown = height / (1 - share)
+	local model = placeFoliage(parent, name, frame, scaleFor(name, grown))
+
+	local foot = model:GetPivot().Position
+	local radius = math.max(height * 0.05, 0.6)
+	local lowest = kit.groundY(foot.X, foot.Z)
+	for i = 1, 8 do
+		local angle = i / 8 * math.pi * 2
+		lowest = math.min(lowest, kit.groundY(foot.X + math.cos(angle) * radius, foot.Z + math.sin(angle) * radius))
+	end
+
+	local buried = grown * share + TREE_SINK
+	model:PivotTo(model:GetPivot() + Vector3.new(0, lowest - buried - foot.Y, 0))
+	return model
 end
 
 -- note: a frame on the ground at a point, sloped to follow the terrain from one point to the next
@@ -277,27 +325,27 @@ end
 
 -- note: the broad old tree on a village green; scale 1 is about 25 studs tall and 36 across
 function nature.oak(kit, palette, parent: Instance, frame: CFrame, random: Random, scale: number): Model
-	local base = frame * CFrame.Angles(0, random:NextNumber(-0.3, 0.3), 0) * CFrame.new(0, -0.4, 0)
-	local model = placeFoliage(parent, "Maple", base, scaleFor("Maple", 25 * scale))
+	local base = frame * CFrame.Angles(0, random:NextNumber(-0.3, 0.3), 0)
+	local model = plantTree(kit, parent, "Maple", base, 25 * scale)
 	model.Name = "Oak"
-	trunkCollider(kit, model, 1.8 * scale, 7 * scale)
+	trunkCollider(kit, model, "Maple", 7 * scale)
 	return model
 end
 
 -- note: a beech or similar broadleaf for lanes and field edges; scale 1 is about 24 studs tall
 function nature.broadleaf(kit, palette, parent: Instance, frame: CFrame, random: Random, scale: number): Model
 	local name = pick(random, BROADLEAVES)
-	local model = placeFoliage(parent, name, frame * CFrame.new(0, -0.4, 0), scaleFor(name, 24 * scale))
+	local model = plantTree(kit, parent, name, frame, 24 * scale)
 	model.Name = "Broadleaf"
-	trunkCollider(kit, model, 1.3 * scale, 7 * scale)
+	trunkCollider(kit, model, name, 7 * scale)
 	return model
 end
 
 -- note: a low apple tree with fruit showing among the leaves; scale 1 is about 10 studs tall
 function nature.apple(kit, palette, parent: Instance, frame: CFrame, random: Random, scale: number): Model
-	local model = placeFoliage(parent, "Broadleaf", frame * spin(random) * CFrame.new(0, -0.3, 0), scaleFor("Broadleaf", 10 * scale))
+	local model = plantTree(kit, parent, "Broadleaf", frame * spin(random), 10 * scale)
 	model.Name = "AppleTree"
-	trunkCollider(kit, model, 0.7 * scale, 3 * scale)
+	trunkCollider(kit, model, "Broadleaf", 3 * scale)
 
 	local crown = crownOf(model)
 	if not crown then
@@ -329,11 +377,41 @@ end
 function nature.hawthorn(kit, palette, parent: Instance, frame: CFrame, random: Random, scale: number): Model
 	local lean = CFrame.fromAxisAngle(Vector3.yAxis:Cross(WIND), math.rad(random:NextNumber(10, 18)))
 	local name = pick(random, HAWTHORNS)
-	local base = CFrame.new(frame.Position) * lean * spin(random) * CFrame.new(0, -0.4, 0)
-	local model = placeFoliage(parent, name, base, scaleFor(name, 11 * scale))
+	local base = CFrame.new(frame.Position) * lean * spin(random)
+	local model = plantTree(kit, parent, name, base, 11 * scale)
 	model.Name = "Hawthorn"
 	tint(model, HAWTHORN_TINT)
-	trunkCollider(kit, model, 0.9 * scale, 3.5 * scale)
+	trunkCollider(kit, model, name, 3.5 * scale)
+	return model
+end
+
+-- Woodland ------------------------------------------------------------------
+
+-- note: a forest tree by its Foliage name at a height, set a little off plumb, with an invisible trunk
+function nature.woodlandTree(kit, palette, parent: Instance, frame: CFrame, random: Random, name: string, height: number): Model
+	local lean = CFrame.Angles(random:NextNumber(-0.04, 0.04), 0, random:NextNumber(-0.04, 0.04))
+	local model = plantTree(kit, parent, name, frame * spin(random) * lean, height)
+	trunkCollider(kit, model, name, math.min(height * 0.35, 10))
+	return model
+end
+
+-- note: deadwood or a boulder from Foliage at a height, solid through a hull around each mesh
+function nature.solidFoliage(kit, palette, parent: Instance, frame: CFrame, random: Random, name: string, height: number): Model
+	local model = placeFoliage(parent, name, frame * spin(random) * CFrame.new(0, -0.3, 0), scaleFor(name, height))
+	for _, part in model:GetDescendants() do
+		if part:IsA("MeshPart") then
+			part.CanCollide = true
+			part.CollisionFidelity = Enum.CollisionFidelity.Hull
+		end
+	end
+
+	return model
+end
+
+-- note: a ground plant or bit of litter from Foliage (ferns, flowers, clover, sticks, saplings) at a height; no collision or shadow
+function nature.groundCover(kit, palette, parent: Instance, frame: CFrame, random: Random, name: string, height: number): Model
+	local model = placeFoliage(parent, name, frame * spin(random) * CFrame.new(0, -0.15, 0), scaleFor(name, height))
+	kit.detail(model)
 	return model
 end
 
